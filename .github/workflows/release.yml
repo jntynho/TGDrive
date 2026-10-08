@@ -78,6 +78,20 @@ jobs:
         run: echo "name=v1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        continue-on-error: true
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: Release ${{ steps.tag.outputs.name }}
+          generate_release_notes: true
+          files: |
+            ${{ steps.outputs.outputs.apk_path }}
+            ${{ steps.outputs.outputs.aab_path }}
+
+      # Retry once if the upload failed (e.g. transient "other side closed" network errors)
+      - name: Retry GitHub Release upload if it failed
+        if: steps.release.outcome == 'failure'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
