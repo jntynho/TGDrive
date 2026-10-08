@@ -58,8 +58,9 @@ class TelegramSessionManager(context: Context) {
     private const val KEY_AUTO_ARCHIVE_DAYS = "auto_archive_days"
 
     // Official Telegram application credentials from my.telegram.org
-    const val DEFAULT_API_ID = "37947557"
-    const val DEFAULT_API_HASH = "1256203a758ab333f6f54459040d7455"
+    // No hardcoded keys: User must configure their own api_id and api_hash
+    const val DEFAULT_API_ID = ""
+    const val DEFAULT_API_HASH = ""
   }
 
   var isLoggedIn: Boolean
@@ -67,11 +68,11 @@ class TelegramSessionManager(context: Context) {
     set(value) = prefs.edit().putBoolean(KEY_IS_LOGGED_IN, value).apply()
 
   var apiId: String
-    get() = prefs.getString(KEY_API_ID, DEFAULT_API_ID) ?: DEFAULT_API_ID
+    get() = prefs.getString(KEY_API_ID, "") ?: ""
     set(value) = prefs.edit().putString(KEY_API_ID, value).apply()
 
   var apiHash: String
-    get() = prefs.getString(KEY_API_HASH, DEFAULT_API_HASH) ?: DEFAULT_API_HASH
+    get() = prefs.getString(KEY_API_HASH, "") ?: ""
     set(value) = prefs.edit().putString(KEY_API_HASH, value).apply()
 
   var autoBackupDcim: Boolean

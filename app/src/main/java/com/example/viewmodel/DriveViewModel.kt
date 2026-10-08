@@ -45,6 +45,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
   val authState: StateFlow<TelegramAuthState> = telegramClient.authState
   val activeTransfers: StateFlow<Map<Long, TransferProgress>> = telegramClient.activeTransfers
+  val floodWaitSeconds: StateFlow<Int> = telegramClient.floodWaitSeconds
 
   // UI state
   private val _selectedFolder = MutableStateFlow("Root")
@@ -273,9 +274,20 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }
   }
 
-  fun verifyCode(code: String, simulate2Fa: Boolean = false, onError: (String) -> Unit) {
+  fun resendAuthenticationCode(onError: (String) -> Unit) {
     viewModelScope.launch {
-      val res = telegramClient.verifyCode(code, simulate2Fa)
+      val res = telegramClient.resendAuthenticationCode()
+      if (res.isFailure) {
+        onError(res.exceptionOrNull()?.message ?: "Failed to resend code")
+      } else {
+        showMessage("Resent authentication code to your Telegram app")
+      }
+    }
+  }
+
+  fun verifyCode(code: String, onError: (String) -> Unit) {
+    viewModelScope.launch {
+      val res = telegramClient.verifyCode(code)
       if (res.isFailure) {
         onError(res.exceptionOrNull()?.message ?: "Invalid code")
       } else {
@@ -295,9 +307,9 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }
   }
 
-  fun logout() {
+  fun logout(purgeDatabase: Boolean = false) {
     viewModelScope.launch {
-      telegramClient.logout()
+      telegramClient.logout(purgeDatabaseDir = purgeDatabase)
       _savedAccounts.value = sessionManager.getSavedAccounts()
     }
   }

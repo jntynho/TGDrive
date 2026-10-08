@@ -14,9 +14,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.telegram.TelegramClient
 import com.example.localization.StringResources
 import com.example.ui.components.UsageStatsCard
 import com.example.ui.components.formatFileSize
@@ -65,6 +69,7 @@ fun SettingsScreen(
   var showImportDialog by remember { mutableStateOf(false) }
   var exportedJsonText by remember { mutableStateOf("") }
   var showApiDialog by remember { mutableStateOf(false) }
+  var showDiagnosticsDialog by remember { mutableStateOf(false) }
   var showLogoutConfirm by remember { mutableStateOf(false) }
 
   Column(
@@ -501,7 +506,37 @@ fun SettingsScreen(
       ) {
         Column {
           Text("Telegram MTProto API Credentials", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-          Text("API ID: $apiId • my.telegram.org", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+          Text("API ID: ${apiId.ifBlank { "Not set" }} • my.telegram.org", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null)
+      }
+    }
+
+    // Diagnostics & TDLib Logs
+    Card(
+      shape = RoundedCornerShape(18.dp),
+      colors = CardDefaults.cardColors(
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+      ),
+      modifier = Modifier
+        .fillMaxWidth()
+        .clickable { showDiagnosticsDialog = true }
+        .testTag("diagnostics_card")
+    ) {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(Icons.Default.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+          Spacer(modifier = Modifier.width(12.dp))
+          Column {
+            Text("Diagnostic Log Report (TGDriveAuth)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text("View & copy last 50 TDLib auth events", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+          }
         }
         Icon(Icons.Default.ChevronRight, contentDescription = null)
       }
@@ -864,15 +899,36 @@ fun SettingsScreen(
 
   // Logout Confirmation Dialog
   if (showLogoutConfirm) {
+    var purgeLocalDatabase by remember { mutableStateOf(false) }
+
     AlertDialog(
       onDismissRequest = { showLogoutConfirm = false },
       title = { Text("Log Out from TGDrive?") },
-      text = { Text("Your local MTProto session will be cleared. Files in your Telegram Saved Messages will remain safe and accessible upon logging back in.") },
+      text = {
+        Column {
+          Text("Your active MTProto session will be closed. Files in your Telegram Saved Messages will remain safe and intact on Telegram servers.")
+          Spacer(modifier = Modifier.height(12.dp))
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Checkbox(
+              checked = purgeLocalDatabase,
+              onCheckedChange = { purgeLocalDatabase = it }
+            )
+            Text(
+              text = "Purge local TDLib cache directory (recommended if experiencing auth/connection errors)",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+      },
       confirmButton = {
         Button(
           onClick = {
             showLogoutConfirm = false
-            viewModel.logout()
+            viewModel.logout(purgeDatabase = purgeLocalDatabase)
             onLogout()
           },
           colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -882,6 +938,91 @@ fun SettingsScreen(
       },
       dismissButton = {
         TextButton(onClick = { showLogoutConfirm = false }) { Text("Cancel") }
+      }
+    )
+  }
+
+  // Diagnostics Dialog
+  if (showDiagnosticsDialog) {
+    val clipboardManager = LocalClipboardManager.current
+    var logs by remember { mutableStateOf(TelegramClient.getDiagnosticLogs()) }
+
+    AlertDialog(
+      onDismissRequest = { showDiagnosticsDialog = false },
+      title = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(Icons.Default.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+          Spacer(modifier = Modifier.width(8.dp))
+          Text("TGDriveAuth Diagnostics")
+        }
+      },
+      text = {
+        Column {
+          Text(
+            text = "Latest TDLib events & connection log (${logs.size} lines):",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline
+          )
+          Spacer(modifier = Modifier.height(8.dp))
+          Card(
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(280.dp)
+          ) {
+            val logScrollState = rememberScrollState()
+            Column(
+              modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(logScrollState)
+                .padding(8.dp)
+            ) {
+              if (logs.isEmpty()) {
+                Text(
+                  text = "No diagnostic events recorded yet.",
+                  style = MaterialTheme.typography.bodySmall,
+                  fontFamily = FontFamily.Monospace
+                )
+              } else {
+                logs.forEach { line ->
+                  Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace
+                  )
+                  Spacer(modifier = Modifier.height(2.dp))
+                }
+              }
+            }
+          }
+          Spacer(modifier = Modifier.height(8.dp))
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            TextButton(onClick = {
+              TelegramClient.clearDiagnosticLogs()
+              logs = emptyList()
+            }) {
+              Text("Clear Logs")
+            }
+            Button(onClick = {
+              val allText = logs.joinToString("\n")
+              clipboardManager.setText(AnnotatedString(allText))
+              viewModel.showMessage("Copied ${logs.size} diagnostic lines to clipboard")
+            }) {
+              Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Copy All")
+            }
+          }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = { showDiagnosticsDialog = false }) { Text("Close") }
       }
     )
   }
